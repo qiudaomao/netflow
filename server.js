@@ -13,6 +13,22 @@ const io = new Server(http);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const routerOsUrl = process.argv[2] || 'http://admin:password@192.168.111.1:80';
+const url = new URL(routerOsUrl);
+
+// RouterOS DNS cache configuration
+const ROUTEROS_CONFIG = {
+    host: url.hostname,
+    port: url.port || (url.protocol === 'https:' ? 443 : 80),
+    username: url.username,
+    password: url.password,
+    protocol: url.protocol.replace(':', ''),
+    pollInterval: 5000 // 5 seconds
+};
+
+console.log(`routeros ${JSON.stringify(ROUTEROS_CONFIG, null, 2)}`)
+
+/*
 // RouterOS DNS cache configuration
 const ROUTEROS_CONFIG = {
     host: '192.168.111.1',
@@ -21,6 +37,7 @@ const ROUTEROS_CONFIG = {
     password: '061x09bg33',
     pollInterval: 5000 // 5 seconds
 };
+*/
 
 // DNS cache storage
 const dnsCache = new Map();
@@ -29,7 +46,7 @@ const dnsCache = new Map();
 async function pollDNSCache() {
     try {
         const auth = Buffer.from(`${ROUTEROS_CONFIG.username}:${ROUTEROS_CONFIG.password}`).toString('base64');
-        fetch(`http://${ROUTEROS_CONFIG.host}:${ROUTEROS_CONFIG.port}/rest/ip/dns/cache`, {
+        fetch(`${ROUTEROS_CONFIG.protocol}://${ROUTEROS_CONFIG.host}:${ROUTEROS_CONFIG.port}/rest/ip/dns/cache`, {
             headers: {
                 'Authorization': `Basic ${auth}`
             }
@@ -49,10 +66,10 @@ async function pollDNSCache() {
 }
 
 // Poll RouterOS DNS cache
-async function pollDHCPCache() {
+function pollDHCPCache() {
     try {
         const auth = Buffer.from(`${ROUTEROS_CONFIG.username}:${ROUTEROS_CONFIG.password}`).toString('base64');
-        fetch(`http://${ROUTEROS_CONFIG.host}:${ROUTEROS_CONFIG.port}/rest/ip/dhcp-server/lease`, {
+        fetch(`${ROUTEROS_CONFIG.protocol}://${ROUTEROS_CONFIG.host}:${ROUTEROS_CONFIG.port}/rest/ip/dhcp-server/lease`, {
             headers: {
                 'Authorization': `Basic ${auth}`
             }
