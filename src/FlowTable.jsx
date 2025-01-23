@@ -13,7 +13,9 @@ import {
     ListItem,
     ListItemButton,
     ListItemText,
-    Typography
+    Typography,
+    TextField,
+    Box
 } from '@mui/material';
 import io from 'socket.io-client';
 
@@ -54,6 +56,7 @@ const FlowTable = () => {
     const [orderBy, setOrderBy] = useState('');
     const [order, setOrder] = useState('asc');
     const [selectedSourceIP, setSelectedSourceIP] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');  // Add this line
 
     useEffect(() => {
         const socket = io({
@@ -64,11 +67,10 @@ const FlowTable = () => {
             console.log('Received event:', eventName, args);
         });
         socket.on('newFlow', (flow) => {
-            // 更新流量数据，保持最新的1000条记录
             setFlows(prevFlows => {
                 const newFlows = [...prevFlows, flow];
-                if (newFlows.length > 1000) {
-                    return newFlows.slice(-1000);
+                if (newFlows.length > 5000) {
+                    return newFlows.slice(-5000);
                 }
                 return newFlows;
             });
@@ -105,8 +107,7 @@ const FlowTable = () => {
         }
         // const ips = new Set(flows.map(flow => flow.ipv4_src_addr));
         return Array.from(ips).filter(ip => {
-            // only check for 192.168.111.0/24 and 192.168.23.0/24
-            return ip && (ip.startsWith('192.168.111.') || ip.startsWith('192.168.23.'))
+            return isLocalIP(ip)
         }).sort().map(ip => {
             return {
                 ip: ip,
@@ -121,16 +122,64 @@ const FlowTable = () => {
         setOrderBy(property);
     };
 
-    const sortedFlows = React.useMemo(() => {
-        if (!orderBy) return flows;
+    function isLocalIP(ip) {
+        return ip && (ip.startsWith('192.168.111.') || ip.startsWith('192.168.23.'));
+    }
 
-        return [...flows].sort((a, b) => {
+    // merge flows, ignore srcPort, merge than if srcIP, dstIP and dstPort are same, also added the bytes together
+    const mergedIOFlows = React.useMemo(() => {
+        const merged = {};
+        // first merge ipv4_src_addr is local ip
+        for (const flow of flows) {
+            let key = `${flow.ipv4_src_addr}:${flow.l4_src_port}=>${flow.ipv4_dst_addr}:${flow.l4_dst_port}`;
+            // if (!isLocalIP(flow.ipv4_src_addr)) {
+                // continue
+            // }
+            if (!merged[key]) {
+                merged[key] = {
+                    ...flow,
+                    in_bytes: 0,
+                    out_bytes: 0
+                };
+            }
+            merged[key].in_bytes += flow.in_bytes;
+        }
+        for (const flow of flows) {
+            let key = `${flow.ipv4_dst_addr}:${flow.l4_dst_port}=>${flow.ipv4_src_addr}:${flow.l4_src_port}`;
+            if (!merged[key]) continue;
+            merged[key].out_bytes += flow.in_bytes;
+        }
+        return Object.values(merged);
+    }, [flows]);
+
+    const mergedFlows = React.useMemo(() => {
+        const merged = {};
+        for (const flow of mergedIOFlows) {
+            // ignore l4_src_port
+            const key = `${flow.ipv4_src_addr}=>${flow.ipv4_dst_addr}:${flow.l4_dst_port}`;
+            if (!merged[key]) {
+                merged[key] = {
+                    ...flow,
+                    in_bytes: 0,
+                    out_bytes: 0,
+                };
+            }
+            merged[key].in_bytes += flow.in_bytes;
+            merged[key].out_bytes += flow.out_bytes;
+        }
+        return Object.values(merged);
+    }, [mergedIOFlows]);
+
+    const sortedFlows = React.useMemo(() => {
+        if (!orderBy) return mergedFlows;
+
+        return [...mergedFlows].sort((a, b) => {
             let aValue, bValue;
             
             switch(orderBy) {
                 case 'sourceIP':
-                    aValue = `${a.ipv4_src_addr}:${a.l4_src_port}`;
-                    bValue = `${b.ipv4_src_addr}:${b.l4_src_port}`;
+                    aValue = `${a.ipv4_src_addr}`;
+                    bValue = `${b.ipv4_src_addr}`;
                     break;
                 case 'destIP':
                     aValue = `${a.ipv4_dst_addr}:${a.l4_dst_port}`;
@@ -144,8 +193,10 @@ const FlowTable = () => {
                     aValue = `${a.postNATDestinationIPv4Address}:${a.postNAPTDestinationTransportPort}`;
                     bValue = `${b.postNATDestinationIPv4Address}:${b.postNAPTDestinationTransportPort}`;
                     break;
-                case 'bytes':
+                case 'in_bytes':
                     return order === 'asc' ? a.in_bytes - b.in_bytes : b.in_bytes - a.in_bytes;
+                case 'out_bytes':
+                    return order === 'asc' ? a.out_bytes - b.out_bytes : b.out_bytes - a.out_bytes;
                 default:
                     aValue = String(a[orderBy]);
                     bValue = String(b[orderBy]);
@@ -155,17 +206,48 @@ const FlowTable = () => {
                 ? aValue.localeCompare(bValue)
                 : bValue.localeCompare(aValue);
         });
-    }, [flows, order, orderBy]);
+    }, [mergedFlows, order, orderBy]);
 
     // Filter flows based on selected source IP (without port)
     const filteredFlows = React.useMemo(() => {
         if (!selectedSourceIP) return sortedFlows;
-        return sortedFlows.filter(flow => flow.postNATSourceIPv4Address === selectedSourceIP);
+        return sortedFlows.filter(flow => flow.ipv4_src_addr === selectedSourceIP);
     }, [sortedFlows, selectedSourceIP]);
 
-    // Remove groupedFlows and use filteredFlows directly in the table
+    // Add this before filteredFlows
+    const searchedFilteredFlows = React.useMemo(() => {
+        if (!searchQuery) return filteredFlows;
+        const query = searchQuery.toLowerCase();
+        return filteredFlows.filter(flow => {
+            return (
+                (flow.sourceDNS || '').toLowerCase().includes(query) ||
+                (flow.destDNS || '').toLowerCase().includes(query) ||
+                (flow.ipv4_src_addr && flow.ipv4_src_addr.toLowerCase().includes(query)) ||
+                (flow.ipv4_dst_addr && flow.ipv4_dst_addr.toLowerCase().includes(query)) ||
+                (flow.postNATSourceIPv4Address && flow.postNATSourceIPv4Address.toLowerCase().includes(query)) ||
+                (flow.postNATDestinationIPv4Address && flow.postNATDestinationIPv4Address.toLowerCase().includes(query)) ||
+                String(flow.l4_src_port).includes(query) ||
+                String(flow.l4_dst_port).includes(query) ||
+                String(flow.postNAPTSourceTransportPort).includes(query) ||
+                String(flow.postNAPTDestinationTransportPort).includes(query) ||
+                (`${flow.protocol && getProtocolName(flow.protocol)}`.toLowerCase().includes(query))
+            );
+        });
+    }, [filteredFlows, searchQuery]);
+
     return (
         <Grid container spacing={2}>
+            <Grid item xs={12}>
+                <Box sx={{ p: 2 }}>
+                    <TextField
+                        fullWidth
+                        variant="outlined"
+                        placeholder="Search in all fields..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </Box>
+            </Grid>
             <Grid item xs={3}>
                 <Paper sx={{ p: 2, maxHeight: 'calc(100vh - 100px)', overflow: 'auto' }}>
                     <Typography variant="h6" gutterBottom>
@@ -204,7 +286,7 @@ const FlowTable = () => {
                                         direction={orderBy === 'sourceIP' ? order : 'asc'}
                                         onClick={() => handleSort('sourceIP')}
                                     >
-                                        Original Source IP:Port
+                                        Source IP:Port
                                     </TableSortLabel>
                                 </TableCell>
                                 <TableCell>
@@ -213,10 +295,10 @@ const FlowTable = () => {
                                         direction={orderBy === 'destIP' ? order : 'asc'}
                                         onClick={() => handleSort('destIP')}
                                     >
-                                        Original Destination IP:Port
+                                        Destination IP:Port
                                     </TableSortLabel>
                                 </TableCell>
-                                <TableCell>
+                                {/* <TableCell>
                                     <TableSortLabel
                                         active={orderBy === 'postNATSourceIP'}
                                         direction={orderBy === 'postNATSourceIP' ? order : 'asc'}
@@ -233,7 +315,7 @@ const FlowTable = () => {
                                     >
                                         NAT Destination IP:Port
                                     </TableSortLabel>
-                                </TableCell>
+                                </TableCell> */}
                                 <TableCell>
                                     <TableSortLabel
                                         active={orderBy === 'protocol'}
@@ -245,32 +327,42 @@ const FlowTable = () => {
                                 </TableCell>
                                 <TableCell>
                                     <TableSortLabel
-                                        active={orderBy === 'bytes'}
-                                        direction={orderBy === 'bytes' ? order : 'asc'}
-                                        onClick={() => handleSort('bytes')}
+                                        active={orderBy === 'in_bytes'}
+                                        direction={orderBy === 'in_bytes' ? order : 'asc'}
+                                        onClick={() => handleSort('in_bytes')}
                                     >
-                                        Bytes
+                                        In Bytes
+                                    </TableSortLabel>
+                                </TableCell>
+                                <TableCell>
+                                    <TableSortLabel
+                                        active={orderBy === 'out_bytes'}
+                                        direction={orderBy === 'out_bytes' ? order : 'asc'}
+                                        onClick={() => handleSort('out_bytes')}
+                                    >
+                                        Out Bytes
                                     </TableSortLabel>
                                 </TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {filteredFlows.map((flow, index) => (
+                            {searchedFilteredFlows.map((flow, index) => (
                                 <TableRow key={index}>
                                     <TableCell>
-                                        {`${flow.sourceDNS || flow.ipv4_src_addr}:${flow.l4_src_port}`}
+                                        {`${flow.sourceDNS || ""}\n${flow.ipv4_src_addr}:${flow.l4_src_port}`}
                                     </TableCell>
                                     <TableCell>
-                                        {`${flow.destDNS || flow.ipv4_dst_addr}:${flow.l4_dst_port}`}
+                                        {`${flow.destDNS || ""}\n${flow.ipv4_dst_addr}:${flow.l4_dst_port}`}
                                     </TableCell>
-                                    <TableCell>
+                                    {/* <TableCell>
                                         {`${flow.postNATSourceIPv4Address}:${flow.postNAPTSourceTransportPort}`}
                                     </TableCell>
                                     <TableCell>
                                         {`${flow.postNATDestinationIPv4Address}:${flow.postNAPTDestinationTransportPort}`}
-                                    </TableCell>
+                                    </TableCell> */}
                                     <TableCell>{getProtocolName(flow.protocol)}</TableCell>
                                     <TableCell>{flow.in_bytes}</TableCell>
+                                    <TableCell>{flow.out_bytes}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
