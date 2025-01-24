@@ -6,11 +6,11 @@ export default defineConfig({
   server: {
     proxy: {
       '/socket.io': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8088',
         ws: true
       },
       '/flows': {
-        target: 'http://localhost:8080'
+        target: 'http://localhost:8088'
       }
     }
   }

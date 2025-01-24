@@ -57,15 +57,18 @@ const FlowTable = () => {
     const [order, setOrder] = useState('asc');
     const [selectedSourceIP, setSelectedSourceIP] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');  // Add this line
+    const [dnsCache, setDnsCache] = useState({});
 
     useEffect(() => {
         const socket = io({
             path: '/socket.io'
         });
         // Add debug logging for all events
+        /*
         socket.onAny((eventName, ...args) => {
             console.log('Received event:', eventName, args);
         });
+        */
         socket.on('newFlow', (flow) => {
             setFlows(prevFlows => {
                 const newFlows = [...prevFlows, flow];
@@ -73,6 +76,17 @@ const FlowTable = () => {
                     return newFlows.slice(-5000);
                 }
                 return newFlows;
+            });
+        });
+        socket.on('addDnsEntry', (entry) => {
+            const {ip, domain} = entry
+            // console.log(`add dns ${ip} ${domain}`)
+            if (dnsCache[ip] === domain) return
+            setDnsCache((old) => {
+                return {
+                    ...old,
+                    [ip]: domain
+                }
             });
         });
 
@@ -102,16 +116,13 @@ const FlowTable = () => {
     const uniqueSourceIPs = React.useMemo(() => {
         const ips = new Set(flows.map(flow => flow.ipv4_src_addr))
         const ip_dns = {}
-        for (const flow of flows) {
-            ip_dns[flow.ipv4_src_addr] = flow.sourceDNS
-        }
         // const ips = new Set(flows.map(flow => flow.ipv4_src_addr));
         return Array.from(ips).filter(ip => {
             return isLocalIP(ip)
         }).sort().map(ip => {
             return {
                 ip: ip,
-                dns: ip_dns[ip]
+                dns: dnsCache[ip] ?? ""
             }
         });
     }, [flows]);
@@ -125,6 +136,10 @@ const FlowTable = () => {
     function isLocalIP(ip) {
         return ip && (ip.startsWith('192.168.111.') || ip.startsWith('192.168.23.'));
     }
+    
+    function wrapIP(ip) {
+        return dnsCache[ip] ? `${ip}[${dnsCache[ip]}]` : ip
+    }
 
     // merge flows, ignore srcPort, merge than if srcIP, dstIP and dstPort are same, also added the bytes together
     const mergedIOFlows = React.useMemo(() => {
@@ -136,10 +151,13 @@ const FlowTable = () => {
                 // continue
             // }
             if (!merged[key]) {
+                if (!flow["ipv4_src_addr"]) continue
                 merged[key] = {
                     ...flow,
                     in_bytes: 0,
-                    out_bytes: 0
+                    out_bytes: 0,
+                    sourceDNS: dnsCache[flow.ipv4_src_addr] ?? "",
+                    destDNS: dnsCache[flow.ipv4_dst_addr] ?? "",
                 };
             }
             merged[key].in_bytes += flow.in_bytes;

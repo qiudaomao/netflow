@@ -42,6 +42,10 @@ const ROUTEROS_CONFIG = {
 // DNS cache storage
 const dnsCache = new Map();
 
+function addCache(ip, domain) {
+    io.emit('addDnsEntry', {ip, domain});
+}
+
 // Poll RouterOS DNS cache
 async function pollDNSCache() {
     try {
@@ -55,7 +59,11 @@ async function pollDNSCache() {
                 // Update DNS cache
                 dnsData.forEach(entry => {
                     if (entry.type === 'A') {
+                        if (!dnsData[entry.data]) {
+                            console.log(`add dnsCache ${entry.data} ${entry.name}`)
+                        }
                         dnsCache.set(entry.data, entry.name);
+                        addCache && addCache(entry.data, entry.name)
                     }
                 });
             })
@@ -77,7 +85,14 @@ function pollDHCPCache() {
             response.json().then((dhcpData)=> {
                 // Update DNS cache
                 dhcpData.forEach(entry => {
-                    dnsCache.set(entry["active-address"], entry["host-name"])
+                    const ip = entry["active-address"]
+                    const domain = entry["host-name"]
+                    if (!ip || !domain) return
+                    if (!dnsCache[ip]) {
+                        console.log(`add dns dhcp ${ip} ${domain}`)
+                    }
+                    dnsCache.set(ip, domain)
+                    addCache && addCache(ip, domain)
                 });
             })
         });
@@ -146,6 +161,6 @@ app.get('/flows', (req, res) => {
     res.json(flows);
 });
 
-http.listen(8080, () => {
-    console.log('Web server listening on port 8080');
+http.listen(8088, () => {
+    console.log('Web server listening on port 8088');
 });
