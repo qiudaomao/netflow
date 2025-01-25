@@ -51,6 +51,15 @@ import io from 'socket.io-client';
 }
 */
 
+// 添加格式化字节数的辅助函数
+const formatBytes = (bytes) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
 const FlowTable = () => {
     const [flows, setFlows] = useState([]);
     const [orderBy, setOrderBy] = useState('');
@@ -115,11 +124,21 @@ const FlowTable = () => {
     // Get unique source IPs from flows (without ports)
     const uniqueSourceIPs = React.useMemo(() => {
         const ips = new Set(flows.map(flow => flow.ipv4_src_addr))
-        const ip_dns = {}
         // const ips = new Set(flows.map(flow => flow.ipv4_src_addr));
         return Array.from(ips).filter(ip => {
             return isLocalIP(ip)
-        }).sort().map(ip => {
+        }).sort((a, b) => {
+            // 将IP地址分割为数字数组并比较
+            const aparts = a.split('.').map(Number);
+            const bparts = b.split('.').map(Number);
+            
+            for(let i = 0; i < 4; i++) {
+                if(aparts[i] !== bparts[i]) {
+                    return aparts[i] - bparts[i];
+                }
+            }
+            return 0;
+        }).map(ip => {
             return {
                 ip: ip,
                 dns: dnsCache[ip] ?? ""
@@ -349,7 +368,7 @@ const FlowTable = () => {
                                         direction={orderBy === 'in_bytes' ? order : 'asc'}
                                         onClick={() => handleSort('in_bytes')}
                                     >
-                                        In Bytes
+                                        Upload
                                     </TableSortLabel>
                                 </TableCell>
                                 <TableCell>
@@ -358,7 +377,7 @@ const FlowTable = () => {
                                         direction={orderBy === 'out_bytes' ? order : 'asc'}
                                         onClick={() => handleSort('out_bytes')}
                                     >
-                                        Out Bytes
+                                        Download
                                     </TableSortLabel>
                                 </TableCell>
                             </TableRow>
@@ -379,8 +398,8 @@ const FlowTable = () => {
                                         {`${flow.postNATDestinationIPv4Address}:${flow.postNAPTDestinationTransportPort}`}
                                     </TableCell> */}
                                     <TableCell>{getProtocolName(flow.protocol)}</TableCell>
-                                    <TableCell>{flow.in_bytes}</TableCell>
-                                    <TableCell>{flow.out_bytes}</TableCell>
+                                    <TableCell>{formatBytes(flow.in_bytes)}</TableCell>
+                                    <TableCell>{formatBytes(flow.out_bytes)}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>

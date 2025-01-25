@@ -60,7 +60,7 @@ async function pollDNSCache() {
                 dnsData.forEach(entry => {
                     if (entry.type === 'A') {
                         if (!dnsData[entry.data]) {
-                            console.log(`add dnsCache ${entry.data} ${entry.name}`)
+                            //console.log(`add dnsCache ${entry.data} ${entry.name}`)
                         }
                         dnsCache.set(entry.data, entry.name);
                         addCache && addCache(entry.data, entry.name)
@@ -89,7 +89,7 @@ function pollDHCPCache() {
                     const domain = entry["host-name"]
                     if (!ip || !domain) return
                     if (!dnsCache[ip]) {
-                        console.log(`add dns dhcp ${ip} ${domain}`)
+                        //console.log(`add dns dhcp ${ip} ${domain}`)
                     }
                     dnsCache.set(ip, domain)
                     addCache && addCache(ip, domain)
