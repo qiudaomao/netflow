@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  netflow:
+    image: qiudaomao/netflow
+    ports:
+      - "3000:3000/udp"
+      - "4173:4173"
+    environment:
+      - VITE_PORT=4173
+      - ROS_URL=http://admin:password@192.168.23.1:8080
