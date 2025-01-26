@@ -23,6 +23,9 @@ docker run -p 3000:3000/udp \
 	-e ROS_URL=http://admin:password@192.168.23.1:8080 qiudaomao/netflow
 ```
 
+```shell
+# routerOS needs enable traffic flow and add target with your host IP:3000
+```
 example:
 
 ![](resources/netflow.png)
