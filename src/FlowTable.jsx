@@ -153,7 +153,7 @@ const FlowTable = () => {
     };
 
     function isLocalIP(ip) {
-        return ip && (ip.startsWith('192.168.111.') || ip.startsWith('192.168.23.'));
+        return ip && (ip.startsWith('192.168.') || ip.startsWith('192.168.'));
     }
     
     function wrapIP(ip) {
@@ -197,6 +197,29 @@ const FlowTable = () => {
         }
         return Object.values(merged);
     }, [flows]);
+    
+    const mergedIPBytes = React.useMemo(() => {
+        let mergedBytes = {}
+        for (const ip of uniqueSourceIPs) {
+            const key = `${ip.ip}`
+            if (!mergedBytes[key]) {
+                mergedBytes[key] = {
+                    ip: ip,
+                    in_bytes: 0,
+                    out_bytes: 0
+                }
+            }
+            for (const flow of flows) {
+                if (flow.ipv4_src_addr === ip.ip) {
+                    mergedBytes[key].in_bytes += flow.in_bytes
+                }
+                if (flow.postNATDestinationIPv4Address === ip.ip) {
+                    mergedBytes[key].out_bytes += flow.in_bytes
+                }
+            }
+        }
+        return mergedBytes
+    }, [mergedIOFlows]);
 
     const mergedFlows = React.useMemo(() => {
         const merged = {};
@@ -316,7 +339,7 @@ const FlowTable = () => {
                                 >
                                     <ListItemText 
                                         primary={entry.ip}
-                                        secondary={entry.dns}
+                                        secondary={`${entry.dns} 🔺${formatBytes(mergedIPBytes[entry.ip].in_bytes ?? 0)} 🔻${formatBytes(mergedIPBytes[entry.ip].out_bytes ?? 0)}`}
                                     />
                                 </ListItemButton>
                             </ListItem>
