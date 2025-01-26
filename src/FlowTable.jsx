@@ -274,18 +274,7 @@ const FlowTable = () => {
 
     return (
         <Grid container spacing={2}>
-            <Grid item xs={12}>
-                <Box sx={{ p: 2 }}>
-                    <TextField
-                        fullWidth
-                        variant="outlined"
-                        placeholder="Search in all fields..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                </Box>
-            </Grid>
-            <Grid item xs={3}>
+            <Grid item xs={4}>
                 <Paper sx={{ p: 2, maxHeight: 'calc(100vh - 100px)', overflow: 'auto' }}>
                     <Typography variant="h6" gutterBottom>
                         Source IPs
@@ -305,14 +294,26 @@ const FlowTable = () => {
                                     selected={selectedSourceIP === entry.ip}
                                     onClick={() => setSelectedSourceIP(entry.ip)}
                                 >
-                                    <ListItemText primary={entry.dns ? `${entry.ip}[${entry.dns}]` : entry.ip} />
+                                    <ListItemText 
+                                        primary={entry.ip}
+                                        secondary={entry.dns}
+                                    />
                                 </ListItemButton>
                             </ListItem>
                         ))}
                     </List>
                 </Paper>
             </Grid>
-            <Grid item xs={9}>
+            <Grid item xs={8}>
+                <Box sx={{ p: 2 }}>
+                    <TextField
+                        fullWidth
+                        variant="outlined"
+                        placeholder="Search in all fields..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </Box>
                 <TableContainer component={Paper}>
                     <Table>
                         <TableHead>
@@ -386,10 +387,16 @@ const FlowTable = () => {
                             {searchedFilteredFlows.map((flow, index) => (
                                 <TableRow key={index}>
                                     <TableCell>
-                                        {`${flow.sourceDNS || ""}\n${flow.ipv4_src_addr}:${flow.l4_src_port}`}
+                                        <>
+                                            <div>{flow.sourceDNS || ""}</div>
+                                            <div style={{ color: 'secondary.main' }}>{`${flow.ipv4_src_addr}:${flow.l4_src_port}`}</div>
+                                        </>
                                     </TableCell>
                                     <TableCell>
-                                        {`${flow.destDNS || ""}\n${flow.ipv4_dst_addr}:${flow.l4_dst_port}`}
+                                        <>
+                                            <div>{flow.destDNS || ""}</div>
+                                            <div style={{ color: 'secondary.main' }}>{`${flow.ipv4_dst_addr}:${flow.l4_dst_port}`}</div>
+                                        </>
                                     </TableCell>
                                     {/* <TableCell>
                                         {`${flow.postNATSourceIPv4Address}:${flow.postNAPTSourceTransportPort}`}
