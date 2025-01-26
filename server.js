@@ -123,31 +123,11 @@ if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.join(__dirname, 'public')));
 }
 
-// Store last 1000 flows
-const flows = [];
-const MAX_FLOWS = 1000;
-
 // NetFlow collector
 Collector(function(flow) {
     flow.flows.forEach(f => {
-        const flowData = {
-            sourceIP: `${f.ipv4_src_addr}:${f.l4_src_port}`,
-            destIP: `${f.ipv4_dst_addr}:${f.l4_dst_port}`,
-            protocol: f.protocol,
-            bytes: f.in_bytes,
-            sourceDNS: dnsCache.get(f.ipv4_src_addr) || '',
-            destDNS: dnsCache.get(f.ipv4_dst_addr) || '',
-            ...f
-        };
-        //console.log(`Received flow: ${JSON.stringify(f, null, 2)}`)
-        //console.log(`Received flow: ${JSON.stringify(flowData)}`)
-        
-        flows.unshift(flowData);
-        if (flows.length > MAX_FLOWS) {
-            flows.pop();
-        }
-        
-        io.emit('newFlow', flowData);
+        // console.log(JSON.stringify(f, null, 1))
+        io.emit('newFlow', f);
     });
 }).listen(3000);
 

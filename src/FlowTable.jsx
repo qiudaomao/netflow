@@ -177,14 +177,23 @@ const FlowTable = () => {
                     out_bytes: 0,
                     sourceDNS: dnsCache[flow.ipv4_src_addr] ?? "",
                     destDNS: dnsCache[flow.ipv4_dst_addr] ?? "",
+                    merged: false
                 };
+                if (flow.first_switched < merged[key].first_switched) {
+                    merged[key].first_switched = flow.first_switched
+                }
+                if (flow.last_switched > merged[key].last_switched) {
+                    merged[key].last_switched = flow.last_switched
+                }
             }
             merged[key].in_bytes += flow.in_bytes;
         }
         for (const flow of flows) {
-            let key = `${flow.ipv4_dst_addr}:${flow.l4_dst_port}=>${flow.ipv4_src_addr}:${flow.l4_src_port}`;
-            if (!merged[key]) continue;
-            merged[key].out_bytes += flow.in_bytes;
+            let key = `${flow.postNATDestinationIPv4Address}:${flow.postNAPTDestinationTransportPort}=>${flow.postNATSourceIPv4Address}:${flow.postNAPTSourceTransportPort}`;
+            if (merged[key]) {
+                merged[key].out_bytes += flow.in_bytes;
+                merged[key].merged = true
+            } 
         }
         return Object.values(merged);
     }, [flows]);
@@ -234,6 +243,10 @@ const FlowTable = () => {
                     return order === 'asc' ? a.in_bytes - b.in_bytes : b.in_bytes - a.in_bytes;
                 case 'out_bytes':
                     return order === 'asc' ? a.out_bytes - b.out_bytes : b.out_bytes - a.out_bytes;
+                case 'last_switched':
+                    return order === 'asc'? a.last_switched - b.last_switched : b.last_switched - a.last_switched;
+                case 'first_switched':
+                    return order === 'asc'? a.first_switched - b.first_switched : b.first_switched - a.first_switched;
                 default:
                     aValue = String(a[orderBy]);
                     bValue = String(b[orderBy]);
@@ -244,11 +257,18 @@ const FlowTable = () => {
                 : bValue.localeCompare(aValue);
         });
     }, [mergedFlows, order, orderBy]);
+    // }, [flows, order, orderBy]);
 
     // Filter flows based on selected source IP (without port)
     const filteredFlows = React.useMemo(() => {
         if (!selectedSourceIP) return sortedFlows;
-        return sortedFlows.filter(flow => flow.ipv4_src_addr === selectedSourceIP);
+        return sortedFlows.filter(flow => 
+            flow.ipv4_src_addr === selectedSourceIP
+            // || (flow.postNATDestinationIPv4Address === selectedSourceIP && !flow.merged)
+            // || flow.ipv4_dst_addr === selectedSourceIP
+            // || flow.postNATSourceIPv4Address === selectedSourceIP
+            // || flow.postNATDestinationIPv4Address === selectedSourceIP
+        );
     }, [sortedFlows, selectedSourceIP]);
 
     // Add this before filteredFlows
@@ -273,8 +293,8 @@ const FlowTable = () => {
     }, [filteredFlows, searchQuery]);
 
     return (
-        <Grid container spacing={2}>
-            <Grid item xs={4}>
+        <Grid container spacing={1}>
+            <Grid item xs={2}>
                 <Paper sx={{ p: 2, maxHeight: 'calc(100vh - 100px)', overflow: 'auto' }}>
                     <Typography variant="h6" gutterBottom>
                         Source IPs
@@ -304,7 +324,7 @@ const FlowTable = () => {
                     </List>
                 </Paper>
             </Grid>
-            <Grid item xs={8}>
+            <Grid item xs={10}>
                 <Box sx={{ p: 2 }}>
                     <TextField
                         fullWidth
@@ -318,6 +338,24 @@ const FlowTable = () => {
                     <Table>
                         <TableHead>
                             <TableRow>
+                                <TableCell>
+                                    <TableSortLabel
+                                        active={orderBy === 'first_switched'}
+                                        direction={orderBy === 'first_switched' ? order : 'asc'}
+                                        onClick={() => handleSort('first_switched')}
+                                    >
+                                        First Switched
+                                    </TableSortLabel>
+                                </TableCell>
+                                <TableCell>
+                                    <TableSortLabel
+                                        active={orderBy === 'last_switched'}
+                                        direction={orderBy === 'last_switched' ? order : 'asc'}
+                                        onClick={() => handleSort('last_switched')}
+                                    >
+                                        Last Switched
+                                    </TableSortLabel>
+                                </TableCell>
                                 <TableCell>
                                     <TableSortLabel
                                         active={orderBy === 'sourceIP'}
@@ -386,6 +424,16 @@ const FlowTable = () => {
                         <TableBody>
                             {searchedFilteredFlows.map((flow, index) => (
                                 <TableRow key={index}>
+                                    <TableCell>
+                                        <>
+                                            <div>{flow.first_switched|| ""}</div>
+                                        </>
+                                    </TableCell>
+                                    <TableCell>
+                                        <>
+                                            <div>{flow.last_switched|| ""}</div>
+                                        </>
+                                    </TableCell>
                                     <TableCell>
                                         <>
                                             <div>{flow.sourceDNS || ""}</div>
