@@ -48,57 +48,53 @@ function addCache(ip, domain) {
 
 // Poll RouterOS DNS cache
 async function pollDNSCache() {
-    try {
-        const auth = Buffer.from(`${ROUTEROS_CONFIG.username}:${ROUTEROS_CONFIG.password}`).toString('base64');
-        fetch(`${ROUTEROS_CONFIG.protocol}://${ROUTEROS_CONFIG.host}:${ROUTEROS_CONFIG.port}/rest/ip/dns/cache`, {
-            headers: {
-                'Authorization': `Basic ${auth}`
-            }
-        }).then((response)=>{
-            response.json().then((dnsData)=> {
-                // Update DNS cache
-                dnsData.forEach(entry => {
-                    if (entry.type === 'A') {
-                        if (!dnsData[entry.data]) {
-                            //console.log(`add dnsCache ${entry.data} ${entry.name}`)
-                        }
-                        dnsCache.set(entry.data, entry.name);
-                        addCache && addCache(entry.data, entry.name)
+    const auth = Buffer.from(`${ROUTEROS_CONFIG.username}:${ROUTEROS_CONFIG.password}`).toString('base64');
+    fetch(`${ROUTEROS_CONFIG.protocol}://${ROUTEROS_CONFIG.host}:${ROUTEROS_CONFIG.port}/rest/ip/dns/cache`, {
+        headers: {
+            'Authorization': `Basic ${auth}`
+        }
+    }).then((response)=>{
+        response.json().then((dnsData)=> {
+            // Update DNS cache
+            dnsData.forEach(entry => {
+                if (entry.type === 'A') {
+                    if (!dnsData[entry.data]) {
+                        //console.log(`add dnsCache ${entry.data} ${entry.name}`)
                     }
-                });
-            })
-        });
-    } catch (error) {
+                    dnsCache.set(entry.data, entry.name);
+                    addCache && addCache(entry.data, entry.name)
+                }
+            });
+        })
+    }).catch((error)=>{
         console.error('Failed to poll DNS cache:', error);
-    }
+    })
 }
 
 // Poll RouterOS DNS cache
 function pollDHCPCache() {
-    try {
-        const auth = Buffer.from(`${ROUTEROS_CONFIG.username}:${ROUTEROS_CONFIG.password}`).toString('base64');
-        fetch(`${ROUTEROS_CONFIG.protocol}://${ROUTEROS_CONFIG.host}:${ROUTEROS_CONFIG.port}/rest/ip/dhcp-server/lease`, {
-            headers: {
-                'Authorization': `Basic ${auth}`
-            }
-        }).then((response)=>{
-            response.json().then((dhcpData)=> {
-                // Update DNS cache
-                dhcpData.forEach(entry => {
-                    const ip = entry["active-address"]
-                    const domain = entry["host-name"]
-                    if (!ip || !domain) return
-                    if (!dnsCache[ip]) {
-                        //console.log(`add dns dhcp ${ip} ${domain}`)
-                    }
-                    dnsCache.set(ip, domain)
-                    addCache && addCache(ip, domain)
-                });
-            })
-        });
-    } catch (error) {
+    const auth = Buffer.from(`${ROUTEROS_CONFIG.username}:${ROUTEROS_CONFIG.password}`).toString('base64');
+    fetch(`${ROUTEROS_CONFIG.protocol}://${ROUTEROS_CONFIG.host}:${ROUTEROS_CONFIG.port}/rest/ip/dhcp-server/lease`, {
+        headers: {
+            'Authorization': `Basic ${auth}`
+        }
+    }).then((response)=>{
+        response.json().then((dhcpData)=> {
+            // Update DNS cache
+            dhcpData.forEach(entry => {
+                const ip = entry["active-address"]
+                const domain = entry["host-name"]
+                if (!ip || !domain) return
+                if (!dnsCache[ip]) {
+                    //console.log(`add dns dhcp ${ip} ${domain}`)
+                }
+                dnsCache.set(ip, domain)
+                addCache && addCache(ip, domain)
+            });
+        })
+    }).catch((error)=> {
         console.error('Failed to poll DHCP cache:', error);
-    }
+    })
 }
 
 // Start DNS polling
